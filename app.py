@@ -1,10 +1,12 @@
 from flask import Flask
+
 from scheduler import Scheduler
 
 app = Flask(__name__)
 
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def hello_world():
     scheduler = Scheduler()
-    return scheduler.get_schedule()
+    data = scheduler.get_schedule()
+    return data
