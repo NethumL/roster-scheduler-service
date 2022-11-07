@@ -119,4 +119,9 @@ class Scheduler:
         print("  - branches       : %i" % solver.NumBranches())
         print("  - wall time      : %f s" % solver.WallTime())
         print("  - solutions found: %i" % solution_printer.solution_count())
-        return {"solution_count": solution_printer.solution_count()}
+        return {
+            "conflicts": solver.NumConflicts(),
+            "branches": solver.NumBranches(),
+            "wall_time": solver.WallTime(),
+            "solution_count": solution_printer.solution_count(),
+        }
