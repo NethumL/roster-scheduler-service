@@ -1,28 +1,13 @@
-import random
+from typing import Any
 
 from ortools.sat.python import cp_model
 
 
 class Scheduler:
-    def get_schedule(self):
-        data = {
-            "doctors": {},
-            "constraints": {
-                "minDoctors": [10 for _ in range(3)],
-                "maxDoctors": [15 for _ in range(3)],
-            },
-        }
-
-        num_shifts = 3
-        num_days = 30
-        num_doctors = 50
-        leave_days = 2
-
-        for i in range(1, num_doctors + 1):
-            prefs = [0, 1, 2]
-            leaves = set(map(lambda _: random.randint(0, 9), range(leave_days)))
-            random.shuffle(prefs)
-            data["doctors"][f"d{i}"] = {"prefs": prefs, "leaves": leaves}
+    def schedule(self, data: dict[str, Any]):
+        num_days: int = data["constraints"]["days"]
+        num_shifts: int = data["constraints"]["shifts"]
+        num_doctors: int = len(data["doctors"])
 
         model = cp_model.CpModel()
         all_days = set(range(num_days))
@@ -62,66 +47,68 @@ class Scheduler:
             min_doctors: int = data["constraints"]["minDoctors"][shift]
             max_doctors: int = data["constraints"]["maxDoctors"][shift]
             for day in range(num_days):
-                num_doctors: list[cp_model.IntVar] = []
+                num_doctors_in_shift: list[cp_model.IntVar] = []
                 for doctor, props in data["doctors"].items():
                     prefs: list[int] = props["prefs"]
                     leaves: list[int] = props["leaves"]
                     if day not in leaves:
-                        num_doctors.append(shifts[(doctor, day, shift)])
-                model.Add(min_doctors <= sum(num_doctors))
-                model.Add(max_doctors >= sum(num_doctors))
+                        num_doctors_in_shift.append(shifts[(doctor, day, shift)])
+                model.Add(min_doctors <= sum(num_doctors_in_shift))
+                model.Add(max_doctors >= sum(num_doctors_in_shift))
 
         solver = cp_model.CpSolver()
         solver.parameters.linearization_level = 0
         solver.parameters.enumerate_all_solutions = True
 
-        class PartialSolutionPrinter(cp_model.CpSolverSolutionCallback):
-            def __init__(self, shifts, limit):
-                cp_model.CpSolverSolutionCallback.__init__(self)
-                self._shifts = shifts
-                self._solution_count = 0
-                self._solution_limit = limit
-
-            def OnSolutionCallback(self):
-                self._solution_count += 1
-                print("Solution %i" % self._solution_count)
-
-                for doctor, props in data["doctors"].items():
-                    prefs: list[int] = props["prefs"]
-                    leaves: set[int] = props["leaves"]
-                    days = all_days.difference(leaves)
-                    for day in days:
-                        is_working = False
-                        for s in prefs:
-                            if self.Value(self._shifts[(doctor, day, s)]):
-                                is_working = True
-                                print(
-                                    f"\tDoctor {doctor} works shift {s}/{prefs[0]}"
-                                    + f" on {day}"
-                                )
-                        if not is_working:
-                            print(f"\tDoctor {doctor} does not work on {day}")
-
-                if self._solution_count >= self._solution_limit:
-                    self.StopSearch()
-
-            def solution_count(self):
-                return self._solution_count
-
         solution_limit = 1
-        solution_printer = PartialSolutionPrinter(shifts, solution_limit)
+        solution_printer = PartialSolutionGetter(
+            data, num_days, shifts, solution_limit, self.set_solution
+        )
 
         solver.Solve(model, solution_printer)
 
         # Statistics
-        print("\nStatistics")
-        print("  - conflicts      : %i" % solver.NumConflicts())
-        print("  - branches       : %i" % solver.NumBranches())
-        print("  - wall time      : %f s" % solver.WallTime())
-        print("  - solutions found: %i" % solution_printer.solution_count())
         return {
             "conflicts": solver.NumConflicts(),
             "branches": solver.NumBranches(),
             "wall_time": solver.WallTime(),
             "solution_count": solution_printer.solution_count(),
         }
+
+    def set_solution(self, solution):
+        self.solution = solution
+
+
+class PartialSolutionGetter(cp_model.CpSolverSolutionCallback):
+    def __init__(self, data, num_days, shifts, limit, solution_setter):
+        cp_model.CpSolverSolutionCallback.__init__(self)
+        self._data = data
+        self._num_days = num_days
+        self._shifts = shifts
+        self._solution_count = 0
+        self._solution_limit = limit
+        self._solution_setter = solution_setter
+
+    def OnSolutionCallback(self):
+        self._solution_count += 1
+
+        solution = {}
+        all_days = set(range(self._num_days))
+        for doctor, props in self._data["doctors"].items():
+            prefs: list[int] = props["prefs"]
+            leaves: set[int] = props["leaves"]
+            days = all_days.difference(leaves)
+            shifts = []
+            for day in days:
+                for s in prefs:
+                    if self.Value(self._shifts[(doctor, day, s)]):
+                        shifts.append(s)
+            solution[doctor] = shifts
+
+        self._solution_setter(solution)
+
+        if self._solution_count >= self._solution_limit:
+            self.StopSearch()
+
+    def solution_count(self):
+        return self._solution_count
