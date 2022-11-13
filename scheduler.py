@@ -8,6 +8,7 @@ class Scheduler:
         num_days: int = data["constraints"]["days"]
         num_shifts: int = data["constraints"]["shifts"]
         num_doctors: int = len(data["doctors"])
+        min_shifts_per_doctor: int = 15
 
         model = cp_model.CpModel()
         all_days = set(range(num_days))
@@ -23,12 +24,15 @@ class Scheduler:
             prefs = props["prefs"]
             leaves = props["leaves"]
             days = all_days.difference(leaves)
+            shifts_for_doctor = []
             for day in days:
                 for i, shift in enumerate(prefs):
                     shifts[(doctor, day, shift)] = model.NewBoolVar(
                         "shift_%s_%id_%is" % (doctor, day, shift)
                     )
+                    shifts_for_doctor.append(shifts[(doctor, day, shift)])
                     pref_factors.append(i * shifts[(doctor, day, shift)])
+            model.Add(min_shifts_per_doctor <= sum(shifts_for_doctor))
 
         # Minimize not preferred shifts
         model.Add(not_pref_count >= sum(pref_factors))
