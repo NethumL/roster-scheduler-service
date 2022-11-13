@@ -93,16 +93,20 @@ class PartialSolutionGetter(cp_model.CpSolverSolutionCallback):
         self._solution_count += 1
 
         solution = {}
-        all_days = set(range(self._num_days))
         for doctor, props in self._data["doctors"].items():
             prefs: list[int] = props["prefs"]
             leaves: set[int] = props["leaves"]
-            days = all_days.difference(leaves)
             shifts = []
-            for day in days:
+            for day in range(self._num_days):
+                if day in leaves:
+                    shifts.append(-1)
+                    continue
                 for s in prefs:
                     if self.Value(self._shifts[(doctor, day, s)]):
                         shifts.append(s)
+                        break
+                else:
+                    shifts.append(-1)
             solution[doctor] = shifts
 
         self._solution_setter(solution)
