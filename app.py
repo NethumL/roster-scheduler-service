@@ -10,6 +10,8 @@ app = Flask(__name__)
 
 
 def prepare_and_send_schedule(data):
+    print("Preparing schedule...")
+    print(data)
     scheduler = Scheduler()
     info = scheduler.schedule(data)
     print(info)
