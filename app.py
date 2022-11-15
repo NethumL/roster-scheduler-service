@@ -1,10 +1,25 @@
 import os
+import threading
 
+import requests
 from flask import Flask, request
 
 from scheduler import Scheduler
 
 app = Flask(__name__)
+
+
+def prepare_and_send_schedule(data):
+    scheduler = Scheduler()
+    info = scheduler.schedule(data)
+    print(info)
+    result = {"schedule": scheduler.solution, "data": data["data"]}
+    response = requests.post(
+        os.getenv("RESPONSE_ENDPOINT"),
+        json=result,
+        headers={"X-secret": os.getenv("SECRET")},
+    )
+    print(response.status_code, response.content)
 
 
 @app.route("/", methods=["POST"])
@@ -18,7 +33,7 @@ def get_schedule():
     else:
         return "Content-Type not supported!"
 
-    scheduler = Scheduler()
-    info = scheduler.schedule(data)
-    print(info)
-    return scheduler.solution
+    t = threading.Thread(target=prepare_and_send_schedule, args=(data,))
+    t.start()
+
+    return {"success": True}
