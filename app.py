@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 def prepare_and_send_schedule(data):
     print("Preparing schedule...")
-    print(data)
+    print("Data:", data)
     scheduler = Scheduler()
     info = scheduler.schedule(data)
     print(info)
@@ -22,6 +22,7 @@ def prepare_and_send_schedule(data):
         headers={"X-secret": os.getenv("SECRET")},
     )
     print(response.status_code, response.content)
+    print("Finished")
 
 
 @app.route("/", methods=["POST"])
@@ -37,5 +38,6 @@ def get_schedule():
 
     t = threading.Thread(target=prepare_and_send_schedule, args=(data,))
     t.start()
+    print("Started thread")
 
     return {"success": True}
